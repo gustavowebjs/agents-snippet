@@ -1,4 +1,18 @@
 (function () {
+  // Add marked library
+  const markedScript = document.createElement("script");
+  markedScript.src = "https://cdn.jsdelivr.net/npm/marked/marked.min.js";
+  document.head.appendChild(markedScript);
+
+  // Configure marked options when it's loaded
+  markedScript.onload = () => {
+    marked.setOptions({
+      breaks: true,
+      sanitize: false, // We need this false to allow links
+      gfm: true,
+    });
+  };
+
   // Styles for the widget
   const styles = `
     .ai-chat-widget {
@@ -10,8 +24,8 @@
     }
 
     .ai-chat-button {
-      width: 60px;
-      height: 60px;
+      width: 50px;
+      height: 50px;
       border-radius: 50%;
       background-color: #3182ce;
       border: none;
@@ -23,22 +37,46 @@
       transition: transform 0.2s;
     }
 
-    .ai-chat-button:hover {
-      transform: scale(1.05);
+    .ai-chat-button svg {
+      width: 20px;
+      height: 20px;
     }
 
     .ai-chat-container {
-      position: fixed;
-      bottom: 100px;
-      right: 20px;
-      width: 380px;
-      height: 600px;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
       background-color: #1A202C;
-      border-radius: 12px;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
       display: none;
       flex-direction: column;
       overflow: hidden;
+      position: fixed;
+    }
+
+    @media (min-width: 640px) {
+      .ai-chat-container {
+        position: fixed;
+        top: auto;
+        left: auto;
+        bottom: 100px;
+        right: 20px;
+        width: 380px;
+        height: 600px;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+      }
+
+      .ai-chat-button {
+        width: 60px;
+        height: 60px;
+      }
+
+      .ai-chat-button svg {
+        width: 24px;
+        height: 24px;
+      }
     }
 
     .ai-chat-header {
@@ -48,6 +86,8 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
+      -webkit-user-select: none;
+      user-select: none;
     }
 
     .ai-chat-close {
@@ -55,29 +95,34 @@
       border: none;
       color: white;
       cursor: pointer;
-      font-size: 20px;
+      font-size: 24px;
+      padding: 8px;
+      margin: -8px;
     }
 
     .ai-chat-messages {
       flex: 1;
       overflow-y: auto;
       padding: 16px;
+      -webkit-overflow-scrolling: touch;
     }
 
     .ai-chat-input-container {
-      padding: 16px;
+      padding: 12px 16px;
       border-top: 1px solid #2D3748;
       display: flex;
       gap: 8px;
+      background-color: #1A202C;
     }
 
     .ai-chat-input {
       flex: 1;
-      padding: 8px 12px;
-      border-radius: 6px;
+      padding: 12px;
+      border-radius: 20px;
       border: 1px solid #2D3748;
       background-color: #2D3748;
-      color: white;
+      color: #fff;
+      font-size: 16px;
     }
 
     .ai-chat-send {
@@ -85,26 +130,45 @@
       background-color: #3182ce;
       color: white;
       border: none;
-      border-radius: 6px;
+      border-radius: 20px;
       cursor: pointer;
+      font-weight: 500;
     }
 
     .ai-message {
-      margin-bottom: 12px;
+      margin-bottom: 16px;
       display: flex;
       gap: 8px;
     }
 
     .ai-message-content {
-      max-width: 70%;
-      padding: 12px;
-      border-radius: 12px;
+      max-width: 85%;
+      padding: 12px 16px;
+      border-radius: 16px;
       color: white;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    .ai-message-content a {
+      color: #63B3ED;
+      text-decoration: none;
+      word-break: break-all;
+    }
+
+    .ai-message-content a:hover {
+      text-decoration: underline;
+    }
+
+    @media (min-width: 640px) {
+      .ai-message-content {
+        max-width: 70%;
+      }
     }
 
     .ai-message.bot .ai-message-content {
       background-color: #2D3748;
-      border-top-left-radius: 0;
+      border-top-left-radius: 4px;
     }
 
     .ai-message.user {
@@ -113,7 +177,7 @@
 
     .ai-message.user .ai-message-content {
       background-color: #3182ce;
-      border-top-right-radius: 0;
+      border-top-right-radius: 4px;
     }
 
     .ai-chat-actions {
@@ -127,15 +191,28 @@
       background: none;
       border: 1px solid #4A5568;
       color: #A0AEC0;
-      padding: 4px 8px;
-      border-radius: 4px;
+      padding: 6px 12px;
+      border-radius: 16px;
       cursor: pointer;
-      font-size: 12px;
+      font-size: 13px;
     }
 
     .ai-chat-clear-history:hover {
       background-color: #4A5568;
       color: white;
+    }
+
+    /* Fix iOS input styles */
+    .ai-chat-input {
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    /* Prevent body scroll when chat is open */
+    body.ai-chat-open {
+      overflow: hidden;
+      position: fixed;
+      width: 100%;
     }
   `;
 
@@ -149,7 +226,7 @@
     initialize() {
       // Add styles
       const styleSheet = document.createElement("style");
-      styleSheet.textContent = styles;
+      styleSheet.textContent = styles + this.getMarkdownStyles();
       document.head.appendChild(styleSheet);
 
       // Create widget elements
@@ -160,11 +237,21 @@
       this.messages.forEach((message) => {
         const messageDiv = document.createElement("div");
         messageDiv.className = `ai-message ${message.isBot ? "bot" : "user"}`;
-        messageDiv.innerHTML = `
-          <div class="ai-message-content">
-            ${message.content}
-          </div>
-        `;
+
+        if (message.isBot && window.marked) {
+          messageDiv.innerHTML = `
+            <div class="ai-message-content">
+              ${marked.parse(message.content)}
+            </div>
+          `;
+        } else {
+          messageDiv.innerHTML = `
+            <div class="ai-message-content">
+              ${message.content}
+            </div>
+          `;
+        }
+
         this.messagesContainer.appendChild(messageDiv);
       });
     }
@@ -229,11 +316,18 @@
     }
 
     toggleChat() {
-      this.container.style.display =
+      const isOpening =
         this.container.style.display === "none" ||
-        this.container.style.display === ""
-          ? "flex"
-          : "none";
+        this.container.style.display === "";
+
+      this.container.style.display = isOpening ? "flex" : "none";
+
+      // Toggle body scroll lock
+      if (isOpening) {
+        document.body.classList.add("ai-chat-open");
+      } else {
+        document.body.classList.remove("ai-chat-open");
+      }
     }
 
     async sendMessage() {
@@ -259,11 +353,31 @@
     addMessage(content, isBot) {
       const messageDiv = document.createElement("div");
       messageDiv.className = `ai-message ${isBot ? "bot" : "user"}`;
-      messageDiv.innerHTML = `
-        <div class="ai-message-content">
-          ${content}
-        </div>
-      `;
+
+      if (isBot && window.marked) {
+        // Create a wrapper for the content
+        const wrapper = document.createElement("div");
+        wrapper.className = "ai-message-content";
+
+        // Convert URLs to markdown links and then parse markdown
+        const contentWithLinks = this.urlify(content);
+        wrapper.innerHTML = marked.parse(contentWithLinks);
+
+        // Make links open in new tab and add security attributes
+        wrapper.querySelectorAll("a").forEach((link) => {
+          link.setAttribute("target", "_blank");
+          link.setAttribute("rel", "noopener noreferrer");
+        });
+
+        messageDiv.appendChild(wrapper);
+      } else {
+        messageDiv.innerHTML = `
+          <div class="ai-message-content">
+            ${content}
+          </div>
+        `;
+      }
+
       this.messagesContainer.appendChild(messageDiv);
       this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
 
@@ -341,6 +455,56 @@
       this.messages = [];
       localStorage.removeItem(`chat-history-${this.config.agentId}`);
       this.messagesContainer.innerHTML = "";
+    }
+
+    // Add styles for markdown content
+    getMarkdownStyles() {
+      return `
+        .ai-message-content {
+          line-height: 1.5;
+        }
+        
+        .ai-message-content p {
+          margin: 0 0 1em 0;
+        }
+        
+        .ai-message-content p:last-child {
+          margin-bottom: 0;
+        }
+
+        .ai-message-content pre {
+          background-color: #2D3748;
+          padding: 1em;
+          border-radius: 4px;
+          overflow-x: auto;
+        }
+
+        .ai-message-content code {
+          background-color: rgba(45, 55, 72, 0.5);
+          padding: 0.2em 0.4em;
+          border-radius: 3px;
+          font-family: monospace;
+        }
+
+        .ai-message-content ul, .ai-message-content ol {
+          margin: 0 0 1em 0;
+          padding-left: 2em;
+        }
+
+        .ai-message-content blockquote {
+          border-left: 3px solid #4A5568;
+          margin: 0 0 1em 0;
+          padding-left: 1em;
+          color: #A0AEC0;
+        }
+      `;
+    }
+
+    urlify(text) {
+      const urlRegex = /(https?:\/\/[^\s]+)/g;
+      return text.replace(urlRegex, (url) => {
+        return `[${url}](${url})`;
+      });
     }
   }
 
