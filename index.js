@@ -46,8 +46,8 @@
       position: absolute;
       top: 0;
       left: 0;
-      width: 100vw;
-      height: 100vh;
+      right: 0;
+      bottom: 0;
       background-color: #1A202C;
       display: none;
       flex-direction: column;
