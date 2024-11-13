@@ -53,6 +53,7 @@
       flex-direction: column;
       overflow: hidden;
       position: fixed;
+      padding-bottom: env(safe-area-inset-bottom, 20px);
     }
 
     @media (min-width: 640px) {
@@ -104,6 +105,7 @@
       flex: 1;
       overflow-y: auto;
       padding: 16px;
+      padding-bottom: 80px;
       -webkit-overflow-scrolling: touch;
     }
 
@@ -113,6 +115,9 @@
       display: flex;
       gap: 8px;
       background-color: #1A202C;
+      position: sticky;
+      bottom: 0;
+      padding-bottom: max(12px, env(safe-area-inset-bottom, 12px));
     }
 
     .ai-chat-input {
